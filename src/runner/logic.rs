@@ -6,7 +6,8 @@ use parking_lot::Mutex;
 
 use crate::{
     network::request::Request,
-    runner::utils::{FoundParameter, ReasonKind}, utils::progress_style_check_requests,
+    runner::utils::{FoundParameter, ReasonKind},
+    utils::progress_style_check_requests,
 };
 
 use super::runner::Runner;
@@ -68,7 +69,6 @@ impl<'a> Runner<'a> {
             let (reflected_parameter, repeat) = response.proceed_reflected_parameters();
 
             if let Some(reflected_parameter) = reflected_parameter {
-
                 let mut found_params = shared_found_params.lock();
                 if !found_params.iter().any(|x| x.name == reflected_parameter) {
                     let mut kind = ReasonKind::Reflected;
@@ -237,7 +237,9 @@ impl<'a> Runner<'a> {
                     if params.len() == 1 && !found_params.iter().any(|x| x.name == params[0]) {
                         // repeating --strict checks. We need to do it twice because we're usually running in parallel
                         // and some parameters may be found after the first check
-                        if self.config.strict && found_params.iter().any(|x| x.diffs == new_diffs.join("|")) {
+                        if self.config.strict
+                            && found_params.iter().any(|x| x.diffs == new_diffs.join("|"))
+                        {
                             return Ok(());
                         }
 
