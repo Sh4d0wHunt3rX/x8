@@ -1,4 +1,9 @@
-use std::{collections::HashMap, error::Error, iter::FromIterator, io::{self, Write}};
+use std::{
+    collections::HashMap,
+    error::Error,
+    io::{self, Write},
+    iter::FromIterator,
+};
 
 use colored::Colorize;
 use indicatif::ProgressBar;
@@ -6,7 +11,12 @@ use itertools::Itertools;
 use lazy_static::lazy_static;
 use regex::Regex;
 
-use crate::{config::structs::Config, diff::diff, runner::utils::ReasonKind, utils::{color_id, is_id_important}};
+use crate::{
+    config::{structs::Config, utils::file_writer},
+    diff::diff,
+    runner::utils::ReasonKind,
+    utils::{color_id, is_id_important},
+};
 
 use super::{
     request::Request,
@@ -179,7 +189,9 @@ impl<'a> Response<'a> {
         // because there can be a parameter that changes the page
         // in this case, the page may return the different amount of reflections to every parameter
         // and this another random parameter will look like a reflected one and may cause false positives
-        } else if self.reflected_parameters.len() == 1 && self.request.as_ref().unwrap().prepared_parameters.len() > 2 {
+        } else if self.reflected_parameters.len() == 1
+            && self.request.as_ref().unwrap().prepared_parameters.len() > 2
+        {
             return (
                 Some(self.reflected_parameters.keys().next().unwrap()),
                 false,
@@ -242,7 +254,6 @@ impl<'a> Response<'a> {
         diff: Option<&str>,
         progress_bar: &ProgressBar,
     ) -> Result<(), Box<dyn Error>> {
-
         let id_if_important = if is_id_important(config) {
             format!("{}) ", color_id(id))
         } else {
@@ -284,6 +295,7 @@ impl<'a> Response<'a> {
                 message += &format!(" [saved to {}]", save_request(config, self, parameter)?);
             }
 
+            let _ = file_writer(config, &(message.clone() + "\n"));
             if config.disable_progress_bar {
                 writeln!(io::stdout(), "{}", message).ok();
             } else {

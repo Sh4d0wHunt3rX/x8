@@ -1,12 +1,10 @@
-use std::{
-    error::Error,
-};
+use std::error::Error;
 
+use colored::Colorize;
 use lazy_static::lazy_static;
 use regex::Regex;
 use reqwest::Client;
 use serde::Serialize;
-use colored::Colorize;
 
 use crate::{
     config::structs::Config,
@@ -15,7 +13,8 @@ use crate::{
         response::Response,
         utils::InjectionPlace,
     },
-    utils::random_line, VALUE_LENGTH,
+    utils::random_line,
+    VALUE_LENGTH,
 };
 
 #[derive(Debug, Default)]
@@ -79,7 +78,9 @@ impl FoundParameter {
     pub fn get(&self) -> (String, String) {
         (
             self.name.clone(),
-            self.value.clone().unwrap_or_else(|| random_line(VALUE_LENGTH)),
+            self.value
+                .clone()
+                .unwrap_or_else(|| random_line(VALUE_LENGTH)),
         )
     }
 
@@ -193,7 +194,6 @@ pub(super) async fn replay<'a>(
     replay_client: &Client,
     found_params: &Vec<FoundParameter>,
 ) -> Result<(), Box<dyn Error>> {
-
     // get cookies
     Request::new(request_defaults, vec![])
         .send_by(replay_client)
@@ -234,9 +234,12 @@ pub(super) async fn verify<'a>(
 
     for param in found_params {
         let param_value = param.get();
-        let mut response = Request::new(request_defaults, vec![format!("{}={}", param_value.0, param_value.1)])
-            .send()
-            .await?;
+        let mut response = Request::new(
+            request_defaults,
+            vec![format!("{}={}", param_value.0, param_value.1)],
+        )
+        .send()
+        .await?;
 
         let (is_code_diff, new_diffs) = response.compare(initial_response, diffs)?;
         let mut is_the_body_the_same = true;
@@ -247,7 +250,10 @@ pub(super) async fn verify<'a>(
 
         response.fill_reflected_parameters(initial_response);
 
-        if is_code_diff || !response.reflected_parameters.is_empty() || stable.body && !is_the_body_the_same {
+        if is_code_diff
+            || !response.reflected_parameters.is_empty()
+            || stable.body && !is_the_body_the_same
+        {
             filtered_params.push(param.clone());
         }
     }
@@ -380,7 +386,10 @@ pub(super) async fn _smart_verify(
 
         response.fill_reflected_parameters(initial_response);
 
-        if !is_code_the_same || !response.reflected_parameters.is_empty() || stable.body && !is_the_body_the_same {
+        if !is_code_the_same
+            || !response.reflected_parameters.is_empty()
+            || stable.body && !is_the_body_the_same
+        {
             filtered_params.push(param.clone());
         }
     }

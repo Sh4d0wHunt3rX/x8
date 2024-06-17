@@ -6,11 +6,16 @@ use crate::{
     network::utils::{DataType, Headers},
 };
 use clap::{crate_version, App, AppSettings, Arg};
-use std::{collections::HashMap, error::Error, fs, io::{self, Write}};
+use std::{
+    collections::HashMap,
+    error::Error,
+    fs,
+    io::{self, Write},
+};
 use tokio::time::Duration;
 use url::Url;
 
-use super::utils::{read_urls_if_possible, mimic_browser_headers, add_default_headers};
+use super::utils::{add_default_headers, mimic_browser_headers, read_urls_if_possible};
 
 pub fn get_config() -> Result<Config, Box<dyn Error>> {
     let app = App::new("x8")
@@ -374,9 +379,11 @@ Conflicts with --verify for now.")
     };
 
     if workers == 1 && args.is_present("one-worker-per-host") && !args.is_present("force") {
-        Err("The --one-worker-per-host option doesn't increase the amount of workers. \
+        Err(
+            "The --one-worker-per-host option doesn't increase the amount of workers. \
 So there's no point in --one-worker-per-host with 1 worker. \
-Increase the amount of workers to remove the error or use --force.")?;
+Increase the amount of workers to remove the error or use --force.",
+        )?;
     }
 
     // try to read request file
@@ -385,7 +392,7 @@ Increase the amount of workers to remove the error or use --force.")?;
         None => String::new(),
     };
 
-    let data_type  = match args.value_of("data-type") { 
+    let data_type = match args.value_of("data-type") {
         Some(val) => {
             if val == "json" {
                 Some(DataType::Json)
@@ -395,17 +402,14 @@ Increase the amount of workers to remove the error or use --force.")?;
                 Err("Incorrect --data-type specified")?
             }
         }
-        None => None
+        None => None,
     };
 
     // parse the default request information
     // either via the request file or via provided parameters
     let (methods, urls, mut headers, body, data_type, http_version) = if !request.is_empty() {
         // if the request file is specified - get protocol (https/http) from args, specify scheme and port, and parse request file
-        let proto = args
-            .value_of("proto")
-            .unwrap_or("https")
-            .to_string();
+        let proto = args.value_of("proto").unwrap_or("https").to_string();
 
         let scheme = proto.replace("://", "");
 
@@ -415,7 +419,13 @@ Increase the amount of workers to remove the error or use --force.")?;
             None
         };
 
-        parse_request(&request, &scheme, port, data_type, args.value_of("split-by"))?
+        parse_request(
+            &request,
+            &scheme,
+            port,
+            data_type,
+            args.value_of("split-by"),
+        )?
     } else {
         // parse everything from user-supplied command line arguments
         let methods = if args.is_present("method") {
@@ -458,25 +468,28 @@ Increase the amount of workers to remove the error or use --force.")?;
 
         // TODO replace with ".parse()" or sth like it
         let data_type = match data_type {
-            Some(val) => {
-                Some(val)
+            Some(val) => Some(val),
+            None => {
+                if headers.get_value_case_insensitive("content-type")
+                    == Some("application/json".to_string())
+                {
+                    Some(DataType::ProbablyJson)
+                } else {
+                    None
+                }
             }
-            None => if headers.get_value_case_insensitive("content-type") == Some("application/json".to_string()) {
-                Some(DataType::ProbablyJson)
-            } else {
-                None
-            },
         };
 
         let http_version = if args.value_of("http").is_some() {
-            match  args.value_of("http").unwrap() {
+            match args.value_of("http").unwrap() {
                 "1.1" => Some(http::Version::HTTP_11),
                 "2" => Some(http::Version::HTTP_2),
                 _ => {
                     writeln!(
                         io::stdout(),
                         "[#] Incorrect http version provided. The argument is ignored"
-                    ).ok();
+                    )
+                    .ok();
                     None
                 }
             }
@@ -484,21 +497,21 @@ Increase the amount of workers to remove the error or use --force.")?;
             None
         };
 
-        let urls = args
-            .values_of("url")
-            .unwrap();
+        let urls = args.values_of("url").unwrap();
 
         let urls = if urls.len() == 1 && !urls.clone().any(|x| x.contains("://")) {
             // it can be a file
             match read_urls_if_possible(urls.clone().next().unwrap())? {
                 Some(urls) => urls,
-                None => Err("The provided --url value is neither url nor a filename.")?
+                None => Err("The provided --url value is neither url nor a filename.")?,
             }
         } else {
             urls.map(|x| x.to_string()).collect()
         };
 
-        let urls = urls.iter().map(|x| Url::parse(x))
+        let urls = urls
+            .iter()
+            .map(|x| Url::parse(x))
             .collect::<Vec<Result<Url, url::ParseError>>>();
 
         // in case there's at least a single wrong url -- return with an error
@@ -516,7 +529,7 @@ Increase the amount of workers to remove the error or use --force.")?;
                 headers,
                 args.value_of("body").unwrap_or("").to_string(),
                 data_type,
-                http_version
+                http_version,
             )
         }
     };
@@ -586,7 +599,7 @@ Increase the amount of workers to remove the error or use --force.")?;
 
     if args.is_present("cookies") {
         if let Some(index) = headers.get_index_case_insensitive("cookie") {
-            headers[index] = (headers[index].0.clone(), headers[index].1.clone()+";%s")
+            headers[index] = (headers[index].0.clone(), headers[index].1.clone() + ";%s")
         } else {
             headers.push(("Cookie".to_string(), "%s".to_string()));
         }

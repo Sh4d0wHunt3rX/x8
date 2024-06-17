@@ -1,4 +1,4 @@
-use crate::{config::structs::Config, utils::random_line, VALUE_LENGTH, RANDOM_LENGTH};
+use crate::{config::structs::Config, utils::random_line, RANDOM_LENGTH, VALUE_LENGTH};
 use itertools::Itertools;
 use lazy_static::lazy_static;
 use percent_encoding::utf8_percent_encode;
@@ -20,7 +20,7 @@ const HEADERS_JOINER: &str = "\x01@%&%@\x01";
 
 use super::{
     response::Response,
-    utils::{DataType, Headers, InjectionPlace, FRAGMENT, create_client, is_binary_content},
+    utils::{create_client, is_binary_content, DataType, Headers, InjectionPlace, FRAGMENT},
 };
 
 #[derive(Debug, Clone, Default)]
@@ -245,7 +245,11 @@ impl<'a> Request<'a> {
             }
             InjectionPlace::HeaderValue => {
                 // in case someone searches headers while sending a valid body - it's usually important to set Content-Type header as well.
-                if !self.defaults.custom_headers.contains_key("Content-Type") && self.defaults.method != "GET" && self.defaults.method != "HEAD" && !self.body.is_empty() {
+                if !self.defaults.custom_headers.contains_key("Content-Type")
+                    && self.defaults.method != "GET"
+                    && self.defaults.method != "HEAD"
+                    && !self.body.is_empty()
+                {
                     if self.body.starts_with('{') {
                         self.set_header("Content-Type", "application/json");
                     } else {
@@ -263,7 +267,11 @@ impl<'a> Request<'a> {
             }
             InjectionPlace::Headers => {
                 // in case someone searches headers while sending a valid body - it's usually important to set Content-Type header as well.
-                if !self.defaults.custom_headers.contains_key("Content-Type") && self.defaults.method != "GET" && self.defaults.method != "HEAD" && !self.body.is_empty() {
+                if !self.defaults.custom_headers.contains_key("Content-Type")
+                    && self.defaults.method != "GET"
+                    && self.defaults.method != "HEAD"
+                    && !self.body.is_empty()
+                {
                     if self.body.starts_with('{') {
                         self.set_header("Content-Type", "application/json");
                     } else {
@@ -344,7 +352,8 @@ impl<'a> Request<'a> {
                     log::debug!("Unable to parse {} header. The value is {:?}", k, v);
                     ""
                 }
-            }.to_string();
+            }
+            .to_string();
 
             headers.push((k, v));
         }
@@ -354,7 +363,9 @@ impl<'a> Request<'a> {
 
         let body_bytes = res.bytes().await?.to_vec();
 
-        let text = if is_binary_content(headers.get_value_case_insensitive("content-type")) && !self.defaults.check_binary {
+        let text = if is_binary_content(headers.get_value_case_insensitive("content-type"))
+            && !self.defaults.check_binary
+        {
             String::new()
         } else {
             String::from_utf8_lossy(&body_bytes).to_string()
@@ -439,7 +450,7 @@ impl<'a> RequestDefaults {
             config.headers_discovery,
             &config.body,
             config.disable_custom_parameters,
-            config.check_binary
+            config.check_binary,
         )
     }
 
@@ -459,11 +470,16 @@ impl<'a> RequestDefaults {
         disable_custom_parameters: bool,
         check_binary: bool,
     ) -> Result<Self, Box<dyn Error>> {
-
         let mut injection_place = if headers_discovery {
             InjectionPlace::Headers
-        } else if (method == "POST" || method == "PUT" || method == "PATCH" || method == "DELETE") && !invert
-        || (method != "POST" && method != "PUT" && method != "PATCH" && method != "DELETE" && invert) {
+        } else if (method == "POST" || method == "PUT" || method == "PATCH" || method == "DELETE")
+            && !invert
+            || (method != "POST"
+                && method != "PUT"
+                && method != "PATCH"
+                && method != "DELETE"
+                && invert)
+        {
             InjectionPlace::Body
         } else {
             InjectionPlace::Path
@@ -471,7 +487,7 @@ impl<'a> RequestDefaults {
 
         if headers_discovery {
             data_type = Some(DataType::Headers);
-            
+
             if custom_headers.iter().any(|x| x.1.contains("%s")) {
                 injection_place = InjectionPlace::HeaderValue;
             }
@@ -483,7 +499,9 @@ impl<'a> RequestDefaults {
         // explained in DataType enum comments
         // tl.dr. data_type was taken from a parsed request's content-type so we are not 100% sure what did a user mean
         // we don't need probablyurlencoded because urlencoded is fine for get requests
-        } else if injection_place == InjectionPlace::Body && data_type == Some(DataType::ProbablyJson) {
+        } else if injection_place == InjectionPlace::Body
+            && data_type == Some(DataType::ProbablyJson)
+        {
             Some(DataType::Json)
         } else if injection_place == InjectionPlace::Path {
             Some(DataType::Urlencoded)
@@ -498,7 +516,11 @@ impl<'a> RequestDefaults {
             template
                 .unwrap_or_else(|| guessed_template.to_string().into())
                 .into(),
-            joiner.unwrap_or_else(|| guessed_joiner.to_string().into()).into().replace("\\r", "\r").replace("\\n", "\n"),
+            joiner
+                .unwrap_or_else(|| guessed_joiner.to_string().into())
+                .into()
+                .replace("\\r", "\r")
+                .replace("\\n", "\n"),
         );
 
         let url = Url::parse(url)?;
@@ -541,7 +563,7 @@ impl<'a> RequestDefaults {
 
             parameters: Vec::new(),
 
-            check_binary
+            check_binary,
         })
     }
 

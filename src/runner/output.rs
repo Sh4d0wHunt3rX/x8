@@ -1,5 +1,5 @@
-use serde::Serialize;
 use colored::Colorize;
+use serde::Serialize;
 
 use crate::{
     config::structs::Config,
@@ -30,7 +30,6 @@ pub struct RunnerOutput {
 
     pub injection_place: InjectionPlace,
 
-
     /// prepared query with found parameters
     #[serde(skip_serializing)]
     pub query: String,
@@ -54,7 +53,10 @@ impl RunnerOutput {
             method: request_defaults.method.clone(),
             //remove injection point in case the injection point within url
             url: if request_defaults.injection_place == InjectionPlace::Path {
-                request_defaults.url_without_default_port().replace("?%s", "").replace("&%s", "")
+                request_defaults
+                    .url_without_default_port()
+                    .replace("?%s", "")
+                    .replace("&%s", "")
             } else {
                 request_defaults.url_without_default_port()
             },

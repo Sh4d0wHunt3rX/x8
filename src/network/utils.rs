@@ -1,4 +1,4 @@
-use std::{time::Duration, error::Error};
+use std::{error::Error, time::Duration};
 
 use lazy_static::lazy_static;
 use percent_encoding::{AsciiSet, CONTROLS};
@@ -40,7 +40,7 @@ pub enum DataType {
     ProbablyJson,
 
     Urlencoded,
-    Headers
+    Headers,
 }
 
 /// where to insert parameters
@@ -53,7 +53,9 @@ pub enum InjectionPlace {
 }
 
 impl Default for InjectionPlace {
-    fn default() -> Self { InjectionPlace::Path }
+    fn default() -> Self {
+        InjectionPlace::Path
+    }
 }
 
 pub trait Headers {
@@ -74,7 +76,8 @@ impl Headers for Vec<(String, String)> {
     }
 
     fn get_index_case_insensitive(&self, key: &str) -> Option<usize> {
-        self.iter().position(|r| r.0.to_lowercase() == key.to_ascii_lowercase())
+        self.iter()
+            .position(|r| r.0.to_lowercase() == key.to_ascii_lowercase())
     }
 
     fn get_value(&self, key: &str) -> Option<String> {
@@ -142,9 +145,7 @@ pub fn create_client(config: &Config, replay: bool) -> Result<Client, Box<dyn Er
     if replay {
         client = client.proxy(match reqwest::Proxy::all(&config.replay_proxy) {
             Ok(val) => val,
-            Err(err) => {
-                Err(format!("Unable to parse replay_proxy: {}", err))?
-            }
+            Err(err) => Err(format!("Unable to parse replay_proxy: {}", err))?,
         });
     } else {
         if !config.proxy.is_empty() {
@@ -160,7 +161,7 @@ pub fn create_client(config: &Config, replay: bool) -> Result<Client, Box<dyn Er
         match config.http_version {
             Some(http::Version::HTTP_11) => client = client.http1_only(),
             Some(http::Version::HTTP_2) => client = client.http2_prior_knowledge(),
-            _ => unreachable!()
+            _ => unreachable!(),
         }
     }
 
@@ -174,7 +175,7 @@ pub fn create_client(config: &Config, replay: bool) -> Result<Client, Box<dyn Er
 /// 2. page diff anyway will be checked by the content-length header
 /// because the content-length header usually static for binary files
 pub fn is_binary_content(content_type: Option<String>) -> bool {
-    lazy_static!{
+    lazy_static! {
         static ref RE_BINARY_MIME: Regex = Regex::new(
             "((video|audio|font|image)/\
     |\

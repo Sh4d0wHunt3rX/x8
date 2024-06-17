@@ -4,11 +4,11 @@ mod tests {
 
     use crate::network::{
         request::{Request, RequestDefaults},
-        utils::{Headers, InjectionPlace, is_binary_content},
+        utils::{is_binary_content, Headers, InjectionPlace},
     };
 
     #[test]
-    fn check_is_binary_content(){
+    fn check_is_binary_content() {
         assert!(is_binary_content(Some("application/pdf".to_string())));
         assert!(is_binary_content(Some("something/zip".to_string())));
         assert!(is_binary_content(Some("image/png".to_string())));

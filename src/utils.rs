@@ -5,37 +5,51 @@ use std::{
 };
 
 use colored::*;
-use indicatif::{MultiProgress, ProgressBar, ProgressStyle, ProgressDrawTarget};
+use indicatif::{MultiProgress, ProgressBar, ProgressDrawTarget, ProgressStyle};
 use linked_hash_map::LinkedHashMap;
 use rand::Rng;
 use url::Url;
 
-use crate::{config::structs::Config, RANDOM_CHARSET};
+use crate::{
+    config::{structs::Config, utils::file_writer},
+    RANDOM_CHARSET,
+};
 
 pub fn progress_style_learn_requests(config: &Config) -> ProgressStyle {
     if config.disable_colors {
-        ProgressStyle::with_template(&format!("{{prefix}} {{bar:{}}} {{pos:>7}}/{{len:7}}", config.progress_bar_len))
-            .unwrap()
-            .progress_chars("**-")
+        ProgressStyle::with_template(&format!(
+            "{{prefix}} {{bar:{}}} {{pos:>7}}/{{len:7}}",
+            config.progress_bar_len
+        ))
+        .unwrap()
+        .progress_chars("**-")
     } else {
-        ProgressStyle::with_template(&format!("{{prefix}} {{bar:{}.cyan/green}} {{pos:>7}}/{{len:7}}", config.progress_bar_len))
-            .unwrap()
-            .progress_chars("**-")
+        ProgressStyle::with_template(&format!(
+            "{{prefix}} {{bar:{}.cyan/green}} {{pos:>7}}/{{len:7}}",
+            config.progress_bar_len
+        ))
+        .unwrap()
+        .progress_chars("**-")
     }
 }
 
 pub fn progress_style_check_requests(config: &Config) -> ProgressStyle {
     if config.disable_colors {
-        ProgressStyle::with_template(&format!("{{prefix}} {{bar:{}}} {{pos:>7}}/{{len:7}}", config.progress_bar_len))
-            .unwrap()
-            .progress_chars("##-")
+        ProgressStyle::with_template(&format!(
+            "{{prefix}} {{bar:{}}} {{pos:>7}}/{{len:7}}",
+            config.progress_bar_len
+        ))
+        .unwrap()
+        .progress_chars("##-")
     } else {
-        ProgressStyle::with_template(&format!("{{prefix}} {{bar:{}.cyan/blue}} {{pos:>7}}/{{len:7}}", config.progress_bar_len))
-            .unwrap()
-            .progress_chars("##-")
+        ProgressStyle::with_template(&format!(
+            "{{prefix}} {{bar:{}.cyan/blue}} {{pos:>7}}/{{len:7}}",
+            config.progress_bar_len
+        ))
+        .unwrap()
+        .progress_chars("##-")
     }
 }
-
 
 /// prints informative messages/non critical errors
 pub fn info<S: Into<String>, T: std::fmt::Display>(
@@ -46,19 +60,13 @@ pub fn info<S: Into<String>, T: std::fmt::Display>(
     msg: T,
 ) {
     if config.verbose > 0 {
-
         let id = if is_id_important(config) {
             format!("{} ", color_id(id))
         } else {
             String::new()
         };
 
-        let message = format!(
-            "{}[{}] {}",
-            id,
-            word.into().yellow(),
-            msg
-        );
+        let message = format!("{}[{}] {}", id, word.into().yellow(), msg);
 
         // in case progress bars are hidden -- the messages from progress_bar.println arent' displayed, so we need to use writeln instead
         if config.disable_progress_bar {
@@ -69,13 +77,43 @@ pub fn info<S: Into<String>, T: std::fmt::Display>(
     }
 }
 
+pub fn info_return<S: Into<String>, T: std::fmt::Display>(
+    config: &Config,
+    id: usize,
+    word: S,
+    msg: T,
+) -> String {
+    if config.verbose > 0 {
+        let id = if is_id_important(config) {
+            format!("{} ", color_id(id))
+        } else {
+            String::new()
+        };
+
+        let message = format!("{}[{}] {}", id, word.into().yellow(), msg);
+
+        return message;
+    }
+
+    return "".to_owned();
+}
+
 /// prints errors. Progress_bar may be null in case the error happened too early (before requests)
-pub fn error<T: std::fmt::Display>(msg: T, url: Option<&str>, progress_bar: Option<&ProgressBar>, config: Option<&Config>) {
+pub fn error<T: std::fmt::Display>(
+    msg: T,
+    url: Option<&str>,
+    progress_bar: Option<&ProgressBar>,
+    config: Option<&Config>,
+) {
     let message = if url.is_none() {
         format!("{} {}", "[#]".red(), msg)
     } else {
         format!("{} [{}] {}", "[#]".red(), url.unwrap(), msg)
     };
+
+    if let Some(conf) = config {
+        file_writer(conf, &(message.clone() + "\n"));
+    }
 
     if progress_bar.is_none() || (config.is_some() && config.unwrap().disable_progress_bar) {
         writeln!(io::stdout(), "{}", message).ok();
@@ -106,10 +144,7 @@ pub fn init_progress(config: &Config) -> Vec<(ProgressBar, Vec<String>)> {
 
     // append progress bars one after another and push them to urls_to_progress
     for url_set in urls {
-        let pb = m.insert_from_back(
-            0,
-            ProgressBar::new(0)
-        );
+        let pb = m.insert_from_back(0, ProgressBar::new(0));
 
         pb.set_style(empty_sty.clone());
 
@@ -164,7 +199,8 @@ pub fn color_id(id: usize) -> String {
         id.to_string().bright_green()
     } else {
         id.to_string().magenta()
-    }.to_string()
+    }
+    .to_string()
 }
 
 /// moves urls with different hosts to different vectors
@@ -194,7 +230,5 @@ pub fn order_urls(urls: &[String]) -> Vec<Vec<String>> {
 
 /// returns true if more than 1 url is being checked a time
 pub fn is_id_important(config: &Config) -> bool {
-    !(
-        config.workers == 1 || config.urls.len() == 1 || config.verbose == 0
-    )
+    !(config.workers == 1 || config.urls.len() == 1 || config.verbose == 0)
 }

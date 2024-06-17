@@ -1,16 +1,19 @@
-use std::{error::Error, io::{self, Write}};
+use std::{
+    error::Error,
+    io::{self, Write},
+};
 
 use colored::Colorize;
 use indicatif::{ProgressBar, ProgressStyle};
 
 use crate::{
-    config::structs::Config,
+    config::{structs::Config, utils::file_writer},
     network::{
         request::{Request, RequestDefaults},
         response::Response,
         utils::{create_client, InjectionPlace},
     },
-    utils::{self, color_id, random_line, progress_style_learn_requests, is_id_important},
+    utils::{self, color_id, is_id_important, progress_style_learn_requests, random_line},
     DEFAULT_PROGRESS_URL_MAX_LEN, MAX_PAGE_SIZE,
 };
 
@@ -112,6 +115,17 @@ impl<'a> Runner<'a> {
         // makes a few request to check page's behavior
         self.stability_checker().await?;
 
+        file_writer(
+            self.config,
+            &(utils::info_return(
+                self.config,
+                self.id,
+                "info",
+                format!("Amount of parameters per request - {}", self.max),
+            )
+            .to_string()
+                + "\n"),
+        );
         if self.config.max.is_none() {
             utils::info(
                 self.config,
@@ -175,17 +189,10 @@ impl<'a> Runner<'a> {
 
         // replay request with found parameters via another proxy
         if !self.config.replay_proxy.is_empty() {
-
             let client = match create_client(self.config, true) {
                 Ok(val) => Some(val),
                 Err(err) => {
-                    utils::info(
-                        self.config,
-                        self.id,
-                        self.progress_bar,
-                        "~",
-                        err,
-                    );
+                    utils::info(self.config, self.id, self.progress_bar, "~", err);
 
                     None
                 }
@@ -197,8 +204,10 @@ impl<'a> Runner<'a> {
                     &self.request_defaults,
                     &client.unwrap(),
                     &found_params,
-                ).await
-                .is_err() {
+                )
+                .await
+                .is_err()
+                {
                     utils::info(
                         self.config,
                         self.id,
@@ -297,7 +306,10 @@ impl<'a> Runner<'a> {
         let mut diffs: Vec<String> = Vec::new();
 
         // set up progress bar
-        self.prepare_progress_bar(progress_style_learn_requests(self.config), self.config.learn_requests_count);
+        self.prepare_progress_bar(
+            progress_style_learn_requests(self.config),
+            self.config.learn_requests_count,
+        );
 
         for _ in 0..self.config.learn_requests_count {
             // to increase stability
@@ -356,7 +368,6 @@ impl<'a> Runner<'a> {
     /// checks whether the increasing of the amount of parameters changes the page
     /// changes self.max in case the page is stable with more parameters per request
     pub async fn try_to_increase_max(&mut self) -> Result<(), Box<dyn Error>> {
-
         let delta = self.max / 2;
 
         let response = Request::new_random(&self.request_defaults, self.max + delta)
@@ -373,7 +384,7 @@ impl<'a> Runner<'a> {
 
         // in case the page isn't different from previous one - try to increase max amount of parameters by 128
         if !is_code_different && (!self.stable.body || is_the_body_the_same) {
-            let response = Request::new_random(&self.request_defaults, self.max + delta*2)
+            let response = Request::new_random(&self.request_defaults, self.max + delta * 2)
                 .send()
                 .await?;
 
@@ -385,7 +396,7 @@ impl<'a> Runner<'a> {
             }
 
             if !is_code_different && (!self.stable.body || is_the_body_the_same) {
-                self.max += delta*2
+                self.max += delta * 2
             } else {
                 self.max += delta
             }
@@ -397,27 +408,30 @@ impl<'a> Runner<'a> {
     /// tries to detect the right amount of parameters that can be send per request in query
     /// TODO maybe detect based on reflection as well
     pub async fn try_to_guess_the_right_max_for_query(&mut self) -> Result<isize, Box<dyn Error>> {
-
         let mut max = 128;
 
         let mut response = match Request::new_random(&self.request_defaults, max)
             .send()
-            .await {
-                Ok(val) => val,
-                // some servers may cut connection in case url is too long
-                // that's why we assume that this request returned response with status code = 0.
-                Err(_) => {
-                    Request::empty_response(Request::new_random(&self.request_defaults, 0))
-                }
+            .await
+        {
+            Ok(val) => val,
+            // some servers may cut connection in case url is too long
+            // that's why we assume that this request returned response with status code = 0.
+            Err(_) => Request::empty_response(Request::new_random(&self.request_defaults, 0)),
         };
 
         loop {
             // the choosen max is okay
             if self.initial_response.code == response.code {
-                break
+                break;
             }
 
-            if Request::new_random(&self.request_defaults, 0).send().await?.code != self.initial_response.code {
+            if Request::new_random(&self.request_defaults, 0)
+                .send()
+                .await?
+                .code
+                != self.initial_response.code
+            {
                 Err("The page became unstable (code)")?
             };
 
@@ -429,15 +443,14 @@ impl<'a> Runner<'a> {
 
             response = match Request::new_random(&self.request_defaults, max)
                 .send()
-                .await {
-                    Ok(val) => val,
-                    Err(_) => {
-                        Request::empty_response(Request::new_random(&self.request_defaults, 0))
-                    }
+                .await
+            {
+                Ok(val) => val,
+                Err(_) => Request::empty_response(Request::new_random(&self.request_defaults, 0)),
             };
         }
 
-        Ok(max as isize *-1)
+        Ok(max as isize * -1)
     }
 
     pub fn prepare_progress_bar(&self, sty: ProgressStyle, length: usize) {
@@ -474,7 +487,6 @@ impl<'a> Runner<'a> {
     }
 
     pub fn write_banner_url(&self) {
-
         let id = if is_id_important(self.config) {
             format!("[{}] ", color_id(self.id))
         } else {
@@ -494,6 +506,7 @@ impl<'a> Runner<'a> {
                 .magenta()
         );
 
+        file_writer(self.config, &(msg.clone() + "\n"));
         if self.config.disable_progress_bar {
             writeln!(io::stdout(), "{}", msg).ok();
         } else {

@@ -1,7 +1,7 @@
 use std::{
-    fs::File,
     collections::HashMap,
     error::Error,
+    fs::{File, OpenOptions},
     io::{self, BufRead, Write},
 };
 
@@ -29,10 +29,10 @@ pub(super) fn parse_request<'a>(
     split_by: Option<&str>,
 ) -> Result<
     (
-        Vec<String>,              // method
-        Vec<String>,              // url
-        Vec<(String, String)>,    // headers
-        String,                   // body
+        Vec<String>,           // method
+        Vec<String>,           // url
+        Vec<(String, String)>, // headers
+        String,                // body
         Option<DataType>,
         Option<reqwest::Version>, // http version
     ),
@@ -112,10 +112,13 @@ pub(super) fn parse_request<'a>(
 
     // port from the --port argument has a priority against port within the host header
     let (host, port) = if port.is_some() {
-       (host.split(':').next().unwrap().to_string(), port.unwrap())
+        (host.split(':').next().unwrap().to_string(), port.unwrap())
     } else if port.is_none() && host.contains(':') {
         let mut host = host.split(':');
-        (host.next().unwrap().to_string(), host.next().unwrap().parse()?)
+        (
+            host.next().unwrap().to_string(),
+            host.next().unwrap().parse()?,
+        )
     } else {
         // neither --port nor port within the host header were specified
         if scheme == "http" {
@@ -131,7 +134,11 @@ pub(super) fn parse_request<'a>(
         headers,
         body,
         data_type,
-        if http2 { Some(http::Version::HTTP_2) } else { Some(http::Version::HTTP_11) }
+        if http2 {
+            Some(http::Version::HTTP_2)
+        } else {
+            Some(http::Version::HTTP_11)
+        },
     ))
 }
 
@@ -162,13 +169,15 @@ pub fn write_banner_config(config: &Config, params: &Vec<String>) {
         )
     }
 
+    let _ = file_writer(config, &(output.clone() + "\n\n"));
+
     writeln!(io::stdout(), "{}\n", output).ok();
 }
 
 pub fn read_urls_if_possible(filename: &str) -> Result<Option<Vec<String>>, io::Error> {
     let file = match File::open(filename) {
         Ok(file) => file,
-        Err(_) => return Ok(None)
+        Err(_) => return Ok(None),
     };
 
     let mut urls = Vec::new();
@@ -195,7 +204,10 @@ pub(super) fn add_default_headers(curr_headers: HashMap<&str, String>) -> Vec<(S
         }
     }
 
-    curr_headers.iter().map(|(k, v)| headers.push((k.to_string(), v.to_string()))).for_each(drop);
+    curr_headers
+        .iter()
+        .map(|(k, v)| headers.push((k.to_string(), v.to_string())))
+        .for_each(drop);
 
     headers
 }
@@ -221,7 +233,37 @@ pub(super) fn mimic_browser_headers(curr_headers: HashMap<&str, String>) -> Vec<
         }
     }
 
-    curr_headers.iter().map(|(k, v)| headers.push((k.to_string(), v.to_string()))).for_each(drop);
+    curr_headers
+        .iter()
+        .map(|(k, v)| headers.push((k.to_string(), v.to_string())))
+        .for_each(drop);
 
     headers
+}
+
+pub fn file_writer(config: &Config, val: &String) {
+    if !config.output_file.is_empty() {
+        if config.output_format == "standart" {
+            if !(config.remove_empty && val.is_empty()) {
+                let file_result = OpenOptions::new()
+                    .create(true)
+                    .append(true)
+                    .open(&config.output_file);
+
+                match file_result {
+                    Ok(mut file) => {
+                        if let Err(err) = file.write_all(val.as_bytes()) {
+                            eprintln!("Failed to write to file: {}", err);
+                        }
+                        if let Err(err) = file.flush() {
+                            eprintln!("Failed to flush file: {}", err);
+                        }
+                    }
+                    Err(err) => {
+                        eprintln!("Failed to open file: {}", err);
+                    }
+                }
+            }
+        }
+    }
 }

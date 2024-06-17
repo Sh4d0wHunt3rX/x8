@@ -1,21 +1,27 @@
 extern crate x8;
 use std::{
     error::Error,
-    sync::Arc,
     io::{self, Write},
     iter::FromIterator,
+    sync::Arc,
 };
 
-use parking_lot::Mutex;
-use tokio::{fs::{self, OpenOptions}, io::AsyncWriteExt};
 use atty::Stream;
+use colored::Colorize;
 use futures::StreamExt;
 use indicatif::ProgressBar;
-use colored::Colorize;
+use parking_lot::Mutex;
+use tokio::{
+    fs::{self, OpenOptions},
+    io::AsyncWriteExt,
+};
 
 use x8::{
     config::args::get_config,
-    config::{structs::Config, utils::write_banner_config},
+    config::{
+        structs::Config,
+        utils::{file_writer, write_banner_config},
+    },
     network::{
         request::{Request, RequestDefaults},
         utils::Headers,
@@ -105,24 +111,6 @@ async fn init() -> Result<(), Box<dyn Error>> {
         params = read_stdin_lines();
     }
 
-    if !config.remove_banner {
-        write_banner_config(&config, &params);
-    }
-
-    // such headers usually cause server to timeout
-    // especially when http/2 is used
-    // probably better to add a flag for keeping such parameters?
-    if config.headers_discovery {
-        params.retain(|x| "content-length" != x.to_lowercase() && "host" != x.to_lowercase());
-    }
-
-    // -W 0 is a special option to run everything in parallel
-    let workers = if config.workers == 0 {
-        config.urls.len()*config.methods.len()
-    } else {
-        config.workers
-    };
-
     // open output file
     let mut output_file = if !config.output_file.is_empty() {
         let mut file = OpenOptions::new();
@@ -145,10 +133,27 @@ async fn init() -> Result<(), Box<dyn Error>> {
 
     let shared_output_file = Arc::new(Mutex::new(&mut output_file));
 
+    if !config.remove_banner {
+        write_banner_config(&config, &params);
+    }
+
+    // such headers usually cause server to timeout
+    // especially when http/2 is used
+    // probably better to add a flag for keeping such parameters?
+    if config.headers_discovery {
+        params.retain(|x| "content-length" != x.to_lowercase() && "host" != x.to_lowercase());
+    }
+
+    // -W 0 is a special option to run everything in parallel
+    let workers = if config.workers == 0 {
+        config.urls.len() * config.methods.len()
+    } else {
+        config.workers
+    };
+
     let runner_outputs =
         futures::stream::iter(init_progress(&config).iter().enumerate().skip(1).map(
             |(id, (progress_bar, url_set))| {
-
                 let shared_output_file = Arc::clone(&shared_output_file);
 
                 // each url set should have each own list of parameters
@@ -200,17 +205,39 @@ async fn init() -> Result<(), Box<dyn Error>> {
                             {
                                 Ok(val) => {
                                     // if output format is not json we can print output and write to file in real time
-                                    if config.output_format != "json" {
+                                    if config.output_format != "json"  {
                                         let mut output_file = shared_output_file.lock();
                                         let output = val.parse(config);
 
-                                        if output_file.is_some() && !(config.remove_empty && val.found_params.is_empty()) {
-
-                                            match output_file.as_mut().unwrap().write_all(
-                                                &strip_ansi_escapes::strip(&(output.normal().clear().to_string()+"\n").as_bytes()).unwrap()
-                                            ).await {
-                                                Ok(()) => output_file.as_mut().unwrap().flush().await.unwrap(),
-                                                Err(err) => utils::error(err, Some(url), Some(progress_bar), Some(config)),
+                                        if output_file.is_some()
+                                            && !(config.remove_empty && val.found_params.is_empty()) 
+                                            && config.output_format != "standart"
+                                        {
+                                            match output_file
+                                                .as_mut()
+                                                .unwrap()
+                                                .write_all(
+                                                    &strip_ansi_escapes::strip(
+                                                        &(output.normal().clear().to_string()
+                                                            + "\n")
+                                                            .as_bytes(),
+                                                    )
+                                                    .unwrap(),
+                                                )
+                                                .await
+                                            {
+                                                Ok(()) => output_file
+                                                    .as_mut()
+                                                    .unwrap()
+                                                    .flush()
+                                                    .await
+                                                    .unwrap(),
+                                                Err(err) => utils::error(
+                                                    err,
+                                                    Some(url),
+                                                    Some(progress_bar),
+                                                    Some(config),
+                                                ),
                                             };
                                         }
 
@@ -220,16 +247,18 @@ async fn init() -> Result<(), Box<dyn Error>> {
                                             format!("{}", output)
                                         };
 
+                                        let message = msg.clone();
                                         if config.disable_progress_bar {
                                             writeln!(io::stdout(), "{}", msg).ok();
                                         } else {
                                             progress_bar.println(msg);
                                         }
 
+                                        file_writer(config, &(message.to_string()));
                                     } else {
                                         runner_outputs.push(val)
                                     }
-                                },
+                                }
                                 Err(err) => {
                                     utils::error(err, Some(url), Some(progress_bar), Some(config))
                                 }
@@ -247,7 +276,7 @@ async fn init() -> Result<(), Box<dyn Error>> {
     // works only in case json output is used.
     // otherwise runner_outputs is an empty vector
     // and all the printing work is done within the futures above
-    if !runner_outputs.is_empty() {
+    if !runner_outputs.is_empty() && config.output_format != "standart" {
         let output = runner_outputs
             .into_iter()
             .flatten()
@@ -256,7 +285,11 @@ async fn init() -> Result<(), Box<dyn Error>> {
             .parse_output(&config);
 
         if output_file.is_some() {
-            output_file.as_mut().unwrap().write_all(output.as_bytes()).await?;
+            output_file
+                .as_mut()
+                .unwrap()
+                .write_all(output.as_bytes())
+                .await?;
             output_file.as_mut().unwrap().flush().await?;
         }
 
